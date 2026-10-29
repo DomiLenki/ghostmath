@@ -49,7 +49,12 @@
         return must(await sb.from('rooms').select('*').eq('code', code).maybeSingle());
       },
       async getRoomLite(code) {
-        return must(await sb.from('rooms').select('code,status,q_index,q_started_at,host_plays,round').eq('code', code).maybeSingle());
+        const r = await sb.from('rooms').select('code,status,q_index,q_started_at,host_plays,round').eq('code', code).maybeSingle();
+        if (r.error && /round/.test(r.error.message || '')) {
+          // Datenbank noch ohne "round"-Spalte: ohne weitermachen
+          return must(await sb.from('rooms').select('code,status,q_index,q_started_at,host_plays').eq('code', code).maybeSingle());
+        }
+        return must(r);
       },
       async joinPlayer(p) {
         must(await sb.from('players').insert({
