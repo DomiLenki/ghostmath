@@ -14,6 +14,15 @@
   };
   const round = (v) => Math.round(v * 1000) / 1000;
 
+  // Schwierigkeitsstufen
+  const DIFFS = {
+    leicht:    { time: 1.5,  mix: [0.3, 0.3, 0.3, 0.1],   tol: 6 },
+    normal:    { time: 1,    mix: [0.25, 0.25, 0.25, 0.25], tol: 4 },
+    schwierig: { time: 0.75, mix: [0.1, 0.2, 0.35, 0.35], tol: 3 },
+  };
+  let D = 'normal';
+  const by = (o) => (o[D] !== undefined ? o[D] : o.normal);
+
   // Punkt p um Zentrum z mit Winkel deg drehen (mathematisch positiv = gegen den Uhrzeigersinn)
   function rot(p, z, deg) {
     const r = (deg * Math.PI) / 180;
@@ -31,8 +40,34 @@
     return Object.assign({ lvl, type: 'mc', time: 20, text, options: opts, answer: opts.indexOf(correct) }, extra);
   }
 
+  // Wahr-oder-Falsch-Blitzrunde
+  function tf(lvl, text, truth, explain) {
+    return { lvl, type: 'mc', blitz: true, time: 10, text: '⚡ Blitz: Wahr oder falsch? ' + text, options: ['Wahr', 'Falsch'], answer: truth ? 0 : 1, explain };
+  }
+  const TF = [
+    ['Bei φ = −90° dreht man gegen den Uhrzeigersinn.', false, 'Negativ heißt: im Uhrzeigersinn.'],
+    ['Das Drehzentrum Z bewegt sich bei der Drehung mit.', false, 'Z ist der einzige Fixpunkt – es bleibt liegen.'],
+    ['Urpunkt und Bildpunkt sind immer gleich weit von Z entfernt.', true, 'Beide liegen auf demselben Kreis um Z.'],
+    ['Bei einer Drehung können sich die Winkel in der Figur verändern.', false, 'Drehen ändert weder Längen noch Winkel.'],
+    ['Eine Drehung um 360° bringt jede Figur zurück an ihren Platz.', true, 'Eine volle Umdrehung = alles wie vorher.'],
+    ['Ein Punkt, der nicht Z ist, kann bei einer Drehung um 90° auf sich selbst landen.', false, 'Nur Z bleibt liegen.'],
+    ['Der Minutenzeiger einer Uhr dreht sich in positiver Drehrichtung.', false, 'Er dreht im Uhrzeigersinn – also negativ.'],
+    ['Bei einer Drehung um 180° ist das Bild deckungsgleich mit dem Original.', true, 'Jede Drehung liefert eine deckungsgleiche Figur.'],
+  ];
+  const TF2 = [
+    ['Eine Drehung um +270° ergibt dasselbe Bild wie eine Drehung um −90°.', true, '270° + 90° = 360°.'],
+    ['+120° und −240° führen zum selben Bild.', true, '120° + 240° = 360°.'],
+    ['+90° und −90° führen immer zum selben Bild.', false, 'Nur bei 180° ist die Richtung egal.'],
+    ['Eine Drehung um +180° und eine um −180° führen zum selben Bild.', true, '180° + 180° = 360°.'],
+    ['−45° und +315° führen zum selben Bild.', true, '45° + 315° = 360°.'],
+    ['+60° und +300° führen zum selben Bild.', false, '+300° ist dasselbe wie −60°, nicht +60°.'],
+  ];
+  const tfFrom = (lvl, pool) => () => { const [t, w, e] = pick(pool); return tf(lvl, t, w, e); };
+
   /* ---------------- Level 1: Kürbis (Grundbegriffe) ---------------- */
   const L1 = [
+    tfFrom(1, TF),
+    tfFrom(1, TF),
     () => mc(1, 'Welche Drehrichtung ist die positive Drehrichtung?', 'Gegen den Uhrzeigersinn',
       ['Mit dem Uhrzeigersinn', 'Immer nach rechts', 'Es gibt keine positive Richtung'],
       { explain: 'Positiv (φ > 0°) dreht man entgegen dem Uhrzeigersinn.' }),
@@ -116,6 +151,7 @@
   }
 
   const L2 = [
+    tfFrom(2, TF2),
     angleSwap,
     angleSwap,
     clockQ,
@@ -160,9 +196,10 @@
 
   function pointQ() {
     for (let t = 0; t < 200; t++) {
-      const phi = pick([90, -90, 180, 90, -90]);
+      const phi = pick(by({ leicht: [90, -90, 180], normal: [90, -90, 180, 90, -90], schwierig: [90, -90, 180, 270, -270] }));
       const z = [rnd(3, 7), rnd(3, 7)];
-      const a = [z[0] + rnd(-3, 3), z[1] + rnd(-3, 3)];
+      const rr = D === 'leicht' ? 2 : 3;
+      const a = [z[0] + rnd(-rr, rr), z[1] + rnd(-rr, rr)];
       if (a[0] === z[0] && a[1] === z[1]) continue;
       if (Math.abs(a[0] - z[0]) + Math.abs(a[1] - z[1]) < 2) continue;
       const b = rot(a, z, phi);
@@ -170,16 +207,17 @@
       return {
         lvl: 3, type: 'point', time: 30, z, a, phi, answer: b,
         text: `📍 Drehe A um Z mit φ = ${phi === 180 ? '180°' : fmt(phi)}. Tippe auf die Stelle, wo A' landet!`,
+        hint: 'Nimm den ⭕ Zirkel: A\' liegt auf dem Kreis um Z durch A.',
         explain: `A' liegt auf dem Kreis um Z durch A, und ∢AZA' = ${Math.abs(phi)}° ${phi > 0 ? 'gegen den' : phi < 0 ? 'im' : ''} Uhrzeigersinn${phi === 180 ? ' (genau gegenüber)' : ''}.`,
       };
     }
   }
 
   function dialShadowQ() {
-    const phi = pick([90, -90, 180, 60, -60, 120, -45, 45, -120]);
+    const phi = pick(by({ leicht: [90, -90, 180], normal: [90, -90, 180, 60, -60, 120, -45, 45, -120], schwierig: [60, -60, 120, -120, 45, -45, 135, -135, 150, -150] }));
     const { z, pts } = placeShape([phi]);
     return {
-      lvl: 3, type: 'dial', time: 35, z, pts, target: phi, shadow: true,
+      lvl: 3, type: 'dial', time: 35, hint: 'Dreh langsam und schau, ob alle drei Ecken auf dem Schatten landen 👻', z, pts, target: phi, shadow: true,
       text: '🌀 Dreh das Dreieck mit dem Drehrad um Z, bis es genau auf dem Geister-Schatten liegt!',
       explain: `Der Schatten ist die Bildfigur bei φ = ${fmt(phi)}${Math.abs(phi) !== 180 ? ` (oder ${fmt(phi > 0 ? phi - 360 : phi + 360)})` : ''}.`,
     };
@@ -192,7 +230,7 @@
 
   function mcFigQ() {
     for (let t = 0; t < 60; t++) {
-      const phi = pick([90, -90, 180, 90, -90, 60, -60]);
+      const phi = pick(by({ leicht: [90, -90, 180], normal: [90, -90, 180, 90, -90, 60, -60], schwierig: [60, -60, 120, -120, 90, -90] }));
       const cands = [-phi, 180, phi + (phi > 0 ? 90 : -90), 90, -90];
       const others = [];
       for (const c of cands) {
@@ -231,7 +269,7 @@
       const rect = [[ax, ay], [ax + w, ay], [ax + w, ay + h], [ax, ay + h]]; // A B C D
       const phi = pick([90, -90, 180, 90, -90]);
       let z;
-      const mode = pick(['vertex', 'vertex', 'mid']);
+      const mode = pick(by({ leicht: ['vertex'], normal: ['vertex', 'vertex', 'mid'], schwierig: ['vertex', 'mid', 'mid'] }));
       if (mode === 'vertex') z = pick(rect);
       else if (phi === 180) z = [rect[2][0] - 0.5, rect[2][1] - 0.5]; // Mitte des überdeckten Kästchens (wie S. 37/2 d)
       else z = [ax + w, ay + h + 1]; // Punkt außerhalb des Rechtecks
@@ -240,14 +278,14 @@
       return {
         lvl: 4, type: 'center', time: 45, rect, img, z, phi,
         text: '🎯 Das Rechteck ABCD wurde gedreht (hell = Original, rot = Bild). Tippe auf das Drehzentrum Z und wähle das Winkelmaß!',
-        choices: [90, -90, 180],
+        choices: [90, -90, 180], hint: 'Welcher Eckpunkt liegt im Original und im Bild an derselben Stelle? Oft ist das Z.',
         explain: `Z = (${z[0]}|${z[1]}), φ = ${phi === 180 ? '180°' : fmt(phi) + ' (oder ' + fmt(phi > 0 ? phi - 360 : phi + 360) + ')'}.`,
       };
     }
   }
 
   function measureQ() {
-    const a = pick([35, 40, 50, 55, 65, 70, 80, 100, 110, 125, 130, 145]);
+    const a = pick(by({ leicht: [40, 50, 60, 70, 80, 90, 100, 110, 120], normal: [35, 40, 50, 55, 65, 70, 80, 100, 110, 125, 130, 145], schwierig: [35, 55, 65, 75, 105, 115, 125, 145, 155] }));
     const sign = pick([1, -1]);
     const phi = a * sign;
     const start = rnd(0, 11) * 30;
@@ -256,17 +294,18 @@
     const p = rot([z[0] + r, z[1]], z, start);
     const q = rot(p, z, phi);
     return {
-      lvl: 4, type: 'measure', time: 45, z, p, q, phi, answer: phi, tol: 4,
+      lvl: 4, type: 'measure', time: 45, z, p, q, phi, answer: phi, tol: DIFFS[D].tol,
+      hint: 'Tippe auf 🧲, dreh das Geodreieck, bis die 0 auf [ZP] liegt, und lies bei [ZP\'] ab.',
       text: '📐 Leg das Geodreieck an und miss: Mit welchem Winkelmaß wurde P um Z auf P\' gedreht? (Vorzeichen beachten!)',
       explain: `∢PZP' = ${a}°, gedreht ${sign > 0 ? 'gegen den' : 'im'} Uhrzeigersinn → φ = ${fmt(phi)}.`,
     };
   }
 
   function dialFreeQ() {
-    const phi = pick([-90, 120, -135, 150, -60, 135, -150, 90, -120]);
+    const phi = pick(by({ leicht: [90, -90, 180], normal: [-90, 120, -135, 150, -60, 135, -150, 90, -120], schwierig: [-135, 150, -150, 135, -120, 210, -210, 240, -240] }));
     const { z, pts } = placeShape([phi]);
     return {
-      lvl: 4, type: 'dial', time: 40, z, pts, target: phi, shadow: false,
+      lvl: 4, type: 'dial', time: 40, z, pts, target: phi, shadow: false, hint: 'Bei 90° wandert jede Ecke eine Vierteldrehung um Z.',
       text: `🌀 Ohne Schatten! Dreh das Dreieck um Z mit φ = ${fmt(phi)}.`,
       explain: `${Math.abs(phi)}° ${phi > 0 ? 'gegen den' : 'im'} Uhrzeigersinn${` (gleichwertig: ${fmt(phi > 0 ? phi - 360 : phi + 360)})`}.`,
     };
@@ -290,15 +329,15 @@
     return out;
   }
 
-  function buildQuestions(total = 16) {
-    const per = Math.max(1, Math.round(total / 4));
-    const n4 = Math.max(1, total - 3 * per);
-    return [
-      ...takeFrom(L1, per),
-      ...takeFrom(L2, per),
-      ...takeFrom(L3, per),
-      ...takeFrom(L4, n4),
-    ];
+  function buildQuestions(total = 16, diff = 'normal') {
+    D = DIFFS[diff] ? diff : 'normal';
+    const cfg = DIFFS[D];
+    const n = cfg.mix.map((f) => Math.max(1, Math.round(total * f)));
+    n[2] = Math.max(1, total - n[0] - n[1] - n[3]);
+    const qs = [...takeFrom(L1, n[0]), ...takeFrom(L2, n[1]), ...takeFrom(L3, n[2]), ...takeFrom(L4, n[3])];
+    qs.forEach((q) => { q.time = Math.max(8, Math.round(q.time * cfg.time)); q.diff = D; });
+    D = 'normal';
+    return qs;
   }
 
   // Antwort prüfen (gleiche Logik für alle Geräte)
@@ -323,7 +362,7 @@
     return false;
   }
 
-  const api = { buildQuestions, check, rot, rotPoly, norm, fmt };
+  const api = { buildQuestions, check, rot, rotPoly, norm, fmt, DIFFS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GMQ = api;
 })(typeof window !== 'undefined' ? window : globalThis);

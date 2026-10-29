@@ -10,11 +10,21 @@ Ein gruseliges Live-Mathe-Quiz (Halloween-Edition) zum Thema **Drehung** für di
 4. Schnelle richtige Antworten geben mehr Punkte (bis 1000), falsche Antworten 0. Ab 3 richtigen in Folge gibt's +100 Bonus 🔥.
 5. Am Ende: Siegerpodest mit Platz 1–5.
 
+## Schwierigkeit
+
+Der Lehrer wählt beim Erstellen: 🍬 **Leicht** (mehr Zeit, nur 90°/180°), 🎃 **Normal** oder 💀 **Schwierig** (weniger Zeit, krumme Winkel wie 135°, mehr Endboss-Fragen).
+
+## Extras
+
+- **Joker** (je einmal pro Spiel): ✂️ 50:50, 🔮 Tipp, ⚡ doppelte Punkte
+- **Emoji-Reaktionen** live in Lobby, Auflösung und Siegerehrung
+- Rangliste mit Platz-Aufstieg, Serien-Bonus 🔥, Konfetti
+
 ## Level
 
 | Level | Inhalt |
 |---|---|
-| 🎃 Kürbis | Grundbegriffe: Drehzentrum, Fixpunkt, Drehrichtung, Schreibweise |
+| 🎃 Kürbis | Grundbegriffe + ⚡ Wahr-oder-Falsch-Blitzrunden |
 | 👻 Geist | Winkel umrechnen (−90° = +270°), Drehrichtung erkennen, Uhrzeiger |
 | 🦇 Fledermaus | Selbst machen: Bildpunkt setzen, Drehrad auf den Geister-Schatten, richtiges Bild finden |
 | 💀 Endboss | Drehzentrum + Winkel finden (wie S. 37/2), mit dem Geodreieck messen, ohne Schatten drehen |

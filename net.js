@@ -34,7 +34,13 @@
         }
         samples.sort((a, b) => a.rtt - b.rtt);
         offset = samples[0].off;
+        // Gibt es schon den Doppel-Joker auf dem Server?
+        try {
+          const t = await sb.rpc('submit_answer2', { p_room: '-----', p_player: '00000000-0000-0000-0000-000000000000', p_q: 0, p_correct: false, p_double: false });
+          this.hasDouble = !t.error;
+        } catch (e) { this.hasDouble = false; }
       },
+      hasDouble: false,
       async createRoom(room) {
         const { error } = await sb.from('rooms').insert({
           code: room.code, host_id: room.hostId, host_plays: room.hostPlays, questions: room.questions,
@@ -76,8 +82,15 @@
       async hostSet(code, hostId, status, q, delayMs = 0) {
         return must(await sb.rpc('host_set', { p_code: code, p_host: hostId, p_status: status, p_q: q, p_delay_ms: delayMs }));
       },
-      async submit(code, playerId, q, correct) {
+      async submit(code, playerId, q, correct, dbl = false) {
+        if (this.hasDouble) return must(await sb.rpc('submit_answer2', { p_room: code, p_player: playerId, p_q: q, p_correct: correct, p_double: !!dbl }));
         return must(await sb.rpc('submit_answer', { p_room: code, p_player: playerId, p_q: q, p_correct: correct }));
+      },
+      reactions(code, onReact) {
+        const ch = sb.channel('gm-react-' + code, { config: { broadcast: { self: true } } });
+        ch.on('broadcast', { event: 'r' }, (m) => onReact(m.payload));
+        ch.subscribe();
+        return { send: (payload) => ch.send({ type: 'broadcast', event: 'r', payload }), close: () => { try { sb.removeChannel(ch); } catch (e) { /* egal */ } } };
       },
       async kick(code, hostId, playerId) {
         return must(await sb.rpc('kick_player', { p_code: code, p_host: hostId, p_player: playerId }));
@@ -119,7 +132,13 @@
     const delay = () => new Promise((r) => setTimeout(r, 20));
     return {
       mode: 'local',
+      hasDouble: true,
       async init() { offset = 0; },
+      reactions(code, onReact) {
+        let rc = null;
+        try { rc = new BroadcastChannel('gm_react_' + code); rc.onmessage = (e) => onReact(e.data); } catch (e) { /* egal */ }
+        return { send: (p) => { onReact(p); if (rc) rc.postMessage(p); }, close: () => { if (rc) rc.close(); } };
+      },
       async createRoom(room) {
         await delay();
         const db = load();
@@ -156,7 +175,7 @@
         save(db, 'rooms');
         return { ok: true };
       },
-      async submit(code, pid, q, correct) {
+      async submit(code, pid, q, correct, dbl = false) {
         await delay();
         const db = load();
         const r = db.rooms[code];
@@ -169,11 +188,12 @@
         if (el > lim + 1.5) return { ok: false, reason: 'late' };
         el = Math.max(0, Math.min(el, lim));
         let pts = 0, bonus = 0, streak = 0;
-        if (correct) { pts = Math.round(1000 * (1 - 0.5 * el / lim)); streak = p.streak + 1; if (streak >= 3) bonus = 100; }
+        const d2 = !!dbl && !p.used_double;
+        if (correct) { pts = Math.round(1000 * (1 - 0.5 * el / lim)); streak = p.streak + 1; if (streak >= 3) bonus = 100; if (d2) pts *= 2; }
         db.answers.push({ room_code: code, player_id: pid, q_index: q, correct, points: pts + bonus, ms: Math.round(el * 1000) });
-        p.score += pts + bonus; p.streak = streak;
+        p.score += pts + bonus; p.streak = streak; p.used_double = p.used_double || d2;
         save(db, 'answers');
-        return { ok: true, points: pts, bonus, streak };
+        return { ok: true, points: pts, bonus, streak, double: d2 };
       },
       async kick(code, hostId, pid) {
         const db = load();
@@ -187,7 +207,7 @@
         const r = db.rooms[code];
         if (!r || r.host_id !== hostId) return { ok: false };
         db.answers = db.answers.filter((a) => a.room_code !== code);
-        db.players.forEach((p) => { if (p.room_code === code) { p.score = 0; p.streak = 0; } });
+        db.players.forEach((p) => { if (p.room_code === code) { p.score = 0; p.streak = 0; p.used_double = false; } });
         Object.assign(r, { status: 'lobby', q_index: -1, q_started_at: null, questions, round: (r.round || 0) + 1 });
         save(db, 'rooms');
         return { ok: true };

@@ -190,14 +190,24 @@
     view: 'home', role: null, code: null, hostId: null, playerId: null, hostPlays: false,
     room: null, players: [], answers: [], unsub: null, poll: null, viewKey: '',
     myAns: {}, results: {}, seenMe: false, autoRevealed: {}, round: 0, busy: false, lastLvl: 0, netErrAt: 0,
+    jokers: { fifty: true, hint: true, double: true }, armDouble: null, ranks: {}, react: null, lastReact: 0,
   };
+  const freshJokers = () => ({ fifty: true, hint: true, double: true });
+  const DIFF_UI = {
+    leicht: { em: '🍬', name: 'Leicht', sub: 'Mehr Zeit, einfache Winkel' },
+    normal: { em: '🎃', name: 'Normal', sub: 'Wie im Unterricht' },
+    schwierig: { em: '💀', name: 'Schwierig', sub: 'Weniger Zeit, krumme Winkel' },
+  };
+  const roomDiff = () => (S.room && S.room.questions && S.room.questions[0] && S.room.questions[0].diff) || 'normal';
   function saveSession() {
     if (!S.code) return sess.del('gm_session');
-    sess.set('gm_session', { role: S.role, code: S.code, hostId: S.hostId, playerId: S.playerId, hostPlays: S.hostPlays, myAns: S.myAns, results: S.results, round: S.round });
+    sess.set('gm_session', { role: S.role, code: S.code, hostId: S.hostId, playerId: S.playerId, hostPlays: S.hostPlays, myAns: S.myAns, results: S.results, round: S.round, jokers: S.jokers, ranks: S.ranks });
   }
   function resetGame() {
     if (S.unsub) S.unsub(); if (S.poll) clearInterval(S.poll);
-    Object.assign(S, { role: null, code: null, hostId: null, playerId: null, hostPlays: false, room: null, players: [], answers: [], unsub: null, poll: null, viewKey: '', myAns: {}, results: {}, seenMe: false, autoRevealed: {}, round: 0 });
+    if (S.react) S.react.close();
+    Object.assign(S, { role: null, code: null, hostId: null, playerId: null, hostPlays: false, room: null, players: [], answers: [], unsub: null, poll: null, viewKey: '', myAns: {}, results: {}, seenMe: false, autoRevealed: {}, round: 0, jokers: freshJokers(), armDouble: null, ranks: {}, react: null });
+    removeReactBar();
     sess.del('gm_session');
     $('#roomTag').classList.add('hidden');
   }
@@ -210,10 +220,19 @@
     S.view = 'home';
     app.innerHTML = `
       <section class="home">
-        <div>
-          <div style="font-size:64px" class="bounce">👻🎃</div>
+        <div class="hero">
+          <svg class="hero-demo" viewBox="0 0 120 120" aria-hidden="true">
+            ${Array.from({ length: 13 }, (_, k) => `<line x1="${k * 10}" y1="0" x2="${k * 10}" y2="120" class="g-line"/><line x1="0" y1="${k * 10}" x2="120" y2="${k * 10}" class="g-line"/>`).join('')}
+            <circle cx="60" cy="60" r="36" fill="none" stroke="#4b3474" stroke-width=".8" stroke-dasharray="2 2"/>
+            <polygon points="60,30 90,30 60,10" transform="rotate(-90 60 60)" fill="rgba(233,224,255,.1)" stroke="#e9e0ff" stroke-width=".8" stroke-dasharray="2 1.5"/>
+            <text x="23" y="53" font-size="9" text-anchor="middle" dominant-baseline="central" opacity=".85">👻</text>
+            <g class="hero-spin"><polygon points="60,30 90,30 60,10" fill="rgba(255,122,26,.45)" stroke="#ff7a1a" stroke-width="1.2" stroke-linejoin="round"/>
+              <circle cx="90" cy="30" r="1.8" fill="#ffd23f"/></g>
+            <g stroke="#ff3355" stroke-width="1.4"><line x1="57" y1="57" x2="63" y2="63"/><line x1="57" y1="63" x2="63" y2="57"/></g>
+            <text x="67" y="55" class="lab" fill="#ff3355" style="font-size:8px">Z</text>
+          </svg>
           <h1 class="hero-title">Ghost Math</h1>
-          <p class="hero-sub">Das gruselige Live-Quiz zum Thema <b style="color:var(--text)">Drehung</b> 🌀</p>
+          <p class="hero-sub">Dreh das Dreieck um Z auf seinen Geist – live gegen deine ganze Klasse.</p>
         </div>
         <div class="role-grid">
           <button class="role t" id="toTeacher"><span class="em">🧙</span><span>Ich bin Lehrer<br><small>Raum erstellen</small></span></button>
@@ -258,7 +277,7 @@
   /* ================================================================== */
   function teacherSetup() {
     S.view = 'teacherSetup';
-    const st = { plays: false, count: 16, name: keep.get('gm_name_t') || 'Lehrer', av: keep.get('gm_av_t') || { c: 2, k: 1, a: 1 } };
+    const st = { plays: false, count: 16, diff: keep.get('gm_diff') || 'normal', name: keep.get('gm_name_t') || 'Lehrer', av: keep.get('gm_av_t') || { c: 2, k: 1, a: 1 } };
     app.innerHTML = `
       <div class="form-wrap stack">
         <h2 class="title-font center" style="font-size:44px;color:var(--purple)">🧙 Raum erstellen</h2>
@@ -267,6 +286,10 @@
             <div class="seg" id="segPlay">
               <button type="button" data-v="0" class="on"><span class="em">📺</span>Nur leiten</button>
               <button type="button" data-v="1"><span class="em">🎮</span>Mitspielen</button>
+            </div></div>
+          <div><label class="lbl">Wie schwer soll es sein?</label>
+            <div class="seg three diff-seg" id="segDiff">
+              ${Object.entries(DIFF_UI).map(([k, d]) => `<button type="button" data-v="${k}" class="${st.diff === k ? 'on' : ''}"><span class="em">${d.em}</span>${d.name}<small>${d.sub}</small></button>`).join('')}
             </div></div>
           <div><label class="lbl">Wie viele Fragen?</label>
             <div class="seg three" id="segCount">
@@ -288,6 +311,7 @@
     }));
     seg('segPlay', 'plays', (v) => v === '1');
     seg('segCount', 'count', (v) => +v);
+    seg('segDiff', 'diff', (v) => v);
     avatarPicker($('#tAv'), st);
     $('#create').onclick = async () => {
       const btn = $('#create');
@@ -295,7 +319,8 @@
       btn.disabled = true; btn.textContent = '⏳ Erstelle Raum …';
       try {
         const hostId = uuid();
-        const questions = GMQ.buildQuestions(st.count);
+        keep.set('gm_diff', st.diff);
+        const questions = GMQ.buildQuestions(st.count, st.diff);
         let code = null;
         for (let i = 0; i < 8 && !code; i++) {
           const c = Array.from({ length: 5 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[ri(32)]).join('');
@@ -387,6 +412,8 @@
     });
     if (S.poll) clearInterval(S.poll);
     S.poll = setInterval(() => refresh(), 2500);
+    if (S.react) S.react.close();
+    try { S.react = Net.reactions(S.code, showReaction); } catch (e) { S.react = null; }
     await refresh();
   }
   let refreshing = false, pending = false, qTimer = null;
@@ -401,7 +428,7 @@
       if (!lite) { goHome('Der Raum existiert nicht mehr 👻'); return; }
       if ((lite.round || 0) !== S.round || !S.room || !S.room.questions) {
         S.room = await Net.getRoom(S.code);
-        if ((S.room.round || 0) !== S.round) { S.round = S.room.round || 0; S.myAns = {}; S.results = {}; S.autoRevealed = {}; saveSession(); }
+        if ((S.room.round || 0) !== S.round) { S.round = S.room.round || 0; S.myAns = {}; S.results = {}; S.autoRevealed = {}; S.jokers = freshJokers(); S.ranks = {}; saveSession(); }
       } else Object.assign(S.room, lite);
       const st = S.room.status;
       if (S.role === 'host' || st !== 'question') S.players = await Net.listPlayers(S.code);
@@ -483,7 +510,11 @@
       const left = Math.max(0, start - Net.now());
       const total = (S.room.__delay || 4000);
       const bar = $('#readyBar'); if (bar) bar.style.width = (100 - Math.min(100, (left / total) * 100)) + '%';
-      const n = $('#readyNum'); if (n) n.textContent = Math.ceil(left / 1000);
+      const n = $('#readyNum');
+      if (n) {
+        const sec = String(Math.ceil(left / 1000));
+        if (n.textContent !== sec) { n.textContent = sec; if (sec !== '0') { Sound.tick(); popAnim(n); } }
+      }
     }
     const ac = $('#answeredCount');
     if (ac) ac.textContent = `${S.answers.length} / ${S.players.length}`;
@@ -497,6 +528,7 @@
   /* ================================================================== */
   function renderGame(ph) {
     lastTickSec = -1;
+    if (ph === 'lobby' || ph === 'reveal' || ph === 'final' || S.room.status === 'lobby') addReactBar(); else removeReactBar();
     if (S.room.status === 'lobby') return renderLobby();
     if (ph === 'ready') return renderReady();
     if (ph === 'play') return renderPlay();
@@ -535,7 +567,7 @@
           <div class="card stack">
             <div class="row" style="justify-content:space-between">
               <span class="count-pill">👥 <b id="pCount">0</b> Spieler</span>
-              <span class="muted small">${S.hostPlays ? '🎮 Du spielst mit' : '📺 Du leitest nur'} · ${S.room.questions.length} Fragen</span>
+              <span class="muted small">${DIFF_UI[roomDiff()].em} ${DIFF_UI[roomDiff()].name} · ${S.room.questions.length} Fragen · ${S.hostPlays ? '🎮 du spielst mit' : '📺 du leitest'}</span>
             </div>
             <div class="players" id="pList"></div>
             <p class="muted small center" style="margin:0">Tipp: Auf ✕ tippen, um jemanden zu entfernen.</p>
@@ -552,6 +584,8 @@
             ${avatarHTML(me ? me.avatar : keep.get('gm_av'), 'xl bounce')}
             <h2 style="font-size:28px">Du bist drin, ${esc(me ? me.name : keep.get('gm_name') || '')}! 🎉</h2>
             <p class="muted" style="margin:0">Warte, bis dein Lehrer das Spiel startet …</p>
+            <span class="count-pill">${DIFF_UI[roomDiff()].em} Schwierigkeit: ${DIFF_UI[roomDiff()].name}</span>
+            <p class="small muted" style="margin:0">Du hast 3 Joker: ✂️ 50:50 · 🔮 Tipp${Net.hasDouble ? ' · ⚡ Doppelte Punkte' : ''} – jeden einmal pro Spiel.</p>
             <button class="btn small ghost" id="editAv">✏️ Avatar ändern</button>
           </div>
           <div class="card stack">
@@ -629,7 +663,8 @@
         <div class="muted">Frage ${i + 1} von ${qs.length}</div>
         <div class="qtext" style="max-width:820px">${esc(q.text)}</div>
         <div style="width:min(420px,90%)" class="progress"><div id="readyBar" style="width:0%"></div></div>
-        <div style="font-size:42px;font-weight:900" id="readyNum"></div>
+        <div class="ready-num" id="readyNum"></div>
+        ${q.blitz ? '<div class="blitz-tag">⚡ Blitzrunde – nur ' + q.time + ' Sekunden!</div>' : ''}
       </div>`;
   }
 
@@ -658,13 +693,13 @@
       body = `<div class="card waiting"><span class="em bounce">🔒</span><h2>Antwort eingeloggt!</h2>
         <p class="muted">Warte auf die anderen … 👀</p><p class="small muted">${tips[i % tips.length]}</p></div>`;
     } else if (iPlay()) {
-      body = `<div id="playArea"></div><div id="timeUp" class="card center hidden" style="margin-top:12px"><b style="font-size:22px">⏰ Zeit abgelaufen!</b></div>`;
+      body = `${jokerBarHTML(q)}<div id="hintBox" class="hint hidden"></div><div id="playArea"></div><div id="timeUp" class="card center hidden" style="margin-top:12px"><b style="font-size:22px">⏰ Zeit abgelaufen!</b></div>`;
     } else {
       body = `<div id="showArea"></div>`;
     }
     app.innerHTML = `${hostBarHTML(true)}<div class="card">${qHeadHTML(q)}<p class="qtext">${esc(q.text)}</p>${body}</div>`;
     const rv = $('#revealNow'); if (rv) rv.onclick = () => hostReveal();
-    if (!done && iPlay()) mountQuestion($('#playArea'), q, 'play');
+    if (!done && iPlay()) { mountQuestion($('#playArea'), q, 'play'); mountJokers(q); }
     if (!iPlay()) mountQuestion($('#showArea'), q, 'show');
     updateLive('play');
   }
@@ -674,13 +709,15 @@
     if (S.myAns[i] != null) return;
     if (timeLeft() <= 0) { toast('⏰ Zu spät!'); return; }
     const correct = GMQ.check(q, ans);
+    const dbl = S.armDouble === i;
+    if (dbl) { S.jokers.double = false; S.armDouble = null; }
     S.myAns[i] = ans;
     saveSession();
     Sound.click();
     tick();
     try {
-      const res = await Net.submit(S.code, S.playerId, i, correct);
-      S.results[i] = res && res.ok ? { correct, points: (res.points || 0) + (res.bonus || 0), bonus: res.bonus || 0, streak: res.streak || 0 } : { correct: false, points: 0, late: true, reason: res && res.reason };
+      const res = await Net.submit(S.code, S.playerId, i, correct, dbl);
+      S.results[i] = res && res.ok ? { correct, points: (res.points || 0) + (res.bonus || 0), bonus: res.bonus || 0, streak: res.streak || 0, double: !!res.double } : { correct: false, points: 0, late: true, reason: res && res.reason };
     } catch (e) {
       S.results[i] = { correct, points: 0, err: true };
       toast('📡 Antwort konnte nicht gesendet werden.');
@@ -735,10 +772,11 @@
   function mountMC(el, q, mode, sol) {
     const picked = sol ? sol.picked : null;
     el.innerHTML = `<div class="stack">${mcFigure(q, !!sol)}
-      <div class="opts">${q.options.map((o, k) => {
+      <div class="opts ${q.options.length === 2 ? 'tf' : ''}">${q.options.map((o, k) => {
         let cls = `opt c${k}`;
         if (sol) { cls += k === q.answer ? ' right' : ' dim'; if (k === picked && k !== q.answer) cls += ' wrong'; }
-        return `<button class="${cls}" data-k="${k}" ${mode !== 'play' ? 'tabindex="-1"' : ''}><span class="ic">${OPT_ICONS[k]}</span>${esc(o)}${sol && k === picked ? ' ← du' : ''}</button>`;
+        const ic = q.options.length === 2 ? (k === 0 ? '✅' : '❌') : OPT_ICONS[k];
+        return `<button class="${cls}" data-k="${k}" style="--i:${k}" ${mode !== 'play' ? 'tabindex="-1"' : ''}><span class="ic">${ic}</span>${esc(o)}${sol && k === picked ? ' ← du' : ''}</button>`;
       }).join('')}</div></div>`;
     if (mode === 'play') $$('[data-k]', el).forEach((b) => (b.onclick = () => submitAnswer(+b.dataset.k)));
     else $$('.opt', el).forEach((b) => (b.style.cursor = 'default'));
@@ -1056,6 +1094,101 @@
   }
 
   /* ================================================================== */
+  /*  Joker                                                              */
+  /* ================================================================== */
+  function jokerBarHTML(q) {
+    const j = S.jokers;
+    const can50 = q.type === 'mc' && q.options.length === 4;
+    const b = (id, em, name, ok, title) => `<button class="joker" id="${id}" ${ok ? '' : 'disabled'} title="${esc(title)}"><span>${em}</span>${name}</button>`;
+    return `<div class="joker-bar" role="group" aria-label="Joker">
+      ${b('jFifty', '✂️', '50:50', j.fifty && can50, can50 ? 'Zwei falsche Antworten verschwinden' : 'Nur bei Fragen mit 4 Antworten')}
+      ${b('jHint', '🔮', 'Tipp', j.hint && !!(q.hint || q.explain), 'Ein Geist flüstert dir einen Tipp')}
+      ${Net.hasDouble ? b('jDouble', '⚡', '×2', j.double, 'Doppelte Punkte bei dieser Frage (wenn richtig)') : ''}
+    </div>`;
+  }
+  function mountJokers(q) {
+    const i = S.room.q_index;
+    const f = $('#jFifty'), h = $('#jHint'), d = $('#jDouble');
+    if (f) f.onclick = () => {
+      S.jokers.fifty = false; f.disabled = true; saveSession(); Sound.spooky();
+      const wrong = [0, 1, 2, 3].filter((k) => k !== q.answer).sort(() => Math.random() - 0.5).slice(0, 2);
+      wrong.forEach((k) => { const o = $(`#playArea [data-k="${k}"]`); if (o) { o.classList.add('gone'); o.disabled = true; } });
+    };
+    if (h) h.onclick = () => {
+      S.jokers.hint = false; h.disabled = true; saveSession(); Sound.spooky();
+      const box = $('#hintBox');
+      box.textContent = '🔮 ' + (q.hint || hintFromExplain(q));
+      box.classList.remove('hidden');
+    };
+    if (d) d.onclick = () => {
+      if (!S.jokers.double) return;
+      S.armDouble = S.armDouble === i ? null : i;
+      d.classList.toggle('armed', S.armDouble === i); Sound.click();
+      toast(S.armDouble === i ? '⚡ Doppelte Punkte aktiv – wenn du richtig liegst!' : 'Joker wieder weggelegt', 1800);
+    };
+  }
+  function hintFromExplain(q) {
+    if (q.blitz) return 'Denk an die Merksätze aus dem Heft: Z bleibt liegen, positiv = gegen den Uhrzeigersinn.';
+    if (q.fig && q.fig.kind === 'clock') return 'Eine volle Stunde sind 360°. Wie viel Grad sind dann 1 Minute?';
+    if (q.fig && q.fig.kind === 'arc') return 'Schau, in welche Richtung der Pfeil läuft: gegen den Uhrzeigersinn = positiv.';
+    if (/gleichen Ergebnis/.test(q.text)) return 'Zwei Drehungen führen zum gleichen Bild, wenn ihre Beträge zusammen 360° ergeben.';
+    if (q.type === 'mcfig') return 'Verfolge eine einzige Ecke: Wohin wandert sie bei dieser Drehung um Z?';
+    return 'Lies die Frage nochmal ganz genau – auf das Vorzeichen kommt es an!';
+  }
+
+  /* ================================================================== */
+  /*  Emoji-Reaktionen                                                   */
+  /* ================================================================== */
+  const REACTS = ['🎃', '👻', '💀', '😱', '🔥', '👏', '🤯', '🍬'];
+  function addReactBar() {
+    if (!S.react || $('#reactBar')) return;
+    const bar = document.createElement('div');
+    bar.id = 'reactBar'; bar.className = 'react-bar';
+    bar.innerHTML = REACTS.map((e) => `<button type="button" data-e="${e}" aria-label="Reaktion ${e}">${e}</button>`).join('');
+    document.body.appendChild(bar);
+    bar.querySelectorAll('[data-e]').forEach((b) => (b.onclick = () => {
+      const t = Date.now();
+      if (t - S.lastReact < 700) return;
+      S.lastReact = t;
+      const me = S.players.find((p) => p.id === S.playerId);
+      const who = me ? me.name : (S.role === 'host' ? 'Lehrer' : '');
+      try { S.react.send({ e: b.dataset.e, n: who.slice(0, 16) }); } catch (e) { /* egal */ }
+    }));
+  }
+  function removeReactBar() { const b = $('#reactBar'); if (b) b.remove(); }
+  function showReaction(p) {
+    if (!p || !REACTS.includes(p.e)) return;
+    const el = document.createElement('div');
+    el.className = 'react-float';
+    el.innerHTML = `<span class="re">${p.e}</span>${p.n ? `<span class="rn">${esc(String(p.n).slice(0, 16))}</span>` : ''}`;
+    el.style.left = (8 + Math.random() * 84) + 'vw';
+    document.body.appendChild(el);
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const drift = (Math.random() - 0.5) * 80;
+    const anim = el.animate(reduce
+      ? [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0 }]
+      : [{ transform: 'translate(-50%, 0) scale(0.9)', opacity: 0 }, { transform: `translate(calc(-50% + ${drift / 2}px), -18vh) scale(1.1)`, opacity: 1, offset: 0.2 }, { transform: `translate(calc(-50% + ${drift}px), -62vh) scale(1)`, opacity: 0 }],
+      { duration: 2600, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', fill: 'forwards' });
+    anim.onfinish = () => el.remove();
+  }
+
+  /* ---------- kleine Effekte ---------- */
+  function popAnim(el) {
+    if (!el.animate) return;
+    el.animate([{ transform: 'scale(0.8)', opacity: 0.4 }, { transform: 'scale(1)', opacity: 1 }], { duration: 260, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' });
+  }
+  function countUp(el, to) {
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || to <= 0) { el.textContent = '+' + to; return; }
+    const t0 = performance.now(), dur = 900;
+    (function f(t) {
+      const k = Math.max(0, Math.min(1, (t - t0) / dur)), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = '+' + Math.round(to * e);
+      if (k < 1) requestAnimationFrame(f);
+    })(t0);
+  }
+
+  /* ================================================================== */
   /*  Auflösung                                                          */
   /* ================================================================== */
   function leaderboardHTML(limit = 5) {
@@ -1081,7 +1214,7 @@
     if (iPlay()) {
       if (mine == null) { banner = `<div class="result-banner late">⏰ Zu langsam!<span class="pts">+0</span></div>`; Sound.bad(); }
       else if (res && res.correct) {
-        banner = `<div class="result-banner ok">✅ Richtig!<span class="pts">+${res.points}</span>${res.bonus ? `<div class="small">🔥 ${res.streak}er-Serie: +${res.bonus} Bonus</div>` : ''}</div>`;
+        banner = `<div class="result-banner ok">✅ Richtig!<span class="pts" data-count="${res.points}">+0</span>${res.double ? '<div class="small">⚡ Doppelte Punkte!</div>' : ''}${res.bonus ? `<div class="small">🔥 ${res.streak}er-Serie: +${res.bonus} Bonus</div>` : ''}</div>`;
         Sound.ok(); if (res.streak >= 3) confetti(1800);
       } else { banner = `<div class="result-banner no">❌ Leider falsch<span class="pts">+0</span></div>`; Sound.bad(); }
     }
@@ -1096,6 +1229,10 @@
     const nextLvl = !last && qs[i + 1].lvl !== q.lvl ? LEVELS[qs[i + 1].lvl] : null;
     const me = S.players.find((p) => p.id === S.playerId);
     const rank = me ? players().findIndex((p) => p.id === S.playerId) + 1 : 0;
+    const prev = S.ranks[i - 1];
+    if (rank) { S.ranks[i] = rank; saveSession(); }
+    const move = rank && prev ? prev - rank : 0;
+    const moveTxt = move > 0 ? `<span class="move up">▲ ${move} ${move === 1 ? 'Platz' : 'Plätze'} hoch</span>` : move < 0 ? `<span class="move down">▼ ${-move}</span>` : '';
     app.innerHTML = `
       <div class="stack">
         ${banner}
@@ -1109,7 +1246,7 @@
           <div class="stack">
             ${stats}
             <div class="card stack"><h3>🏆 Rangliste</h3>${leaderboardHTML(5)}
-              ${rank ? `<div class="center muted">Du bist auf Platz <b style="color:var(--text)">${rank}</b> von ${S.players.length}</div>` : ''}</div>
+              ${rank ? `<div class="center muted">Du bist auf Platz <b style="color:var(--text)">${rank}</b> von ${S.players.length} ${moveTxt}</div>` : ''}</div>
             ${nextLvl ? `<div class="card center"><b>Achtung!</b> Als Nächstes: ${nextLvl.em} Level ${qs[i + 1].lvl} · ${nextLvl.name}</div>` : ''}
             ${S.role === 'host' ? `<button class="btn green big wide" id="nextBtn">${last ? '🏆 Zum Siegerpodest' : '▶ Nächste Frage'}</button>` : '<p class="muted center">Gleich geht\'s weiter … 👀</p>'}
           </div>
@@ -1124,6 +1261,7 @@
     else if (q.type === 'center') mountCenter(area, q, 'show', sol);
     else if (q.type === 'measure') mountMeasure(area, q, 'show', sol);
     const nb = $('#nextBtn'); if (nb) nb.onclick = () => hostGoTo(i + 1);
+    const cnt = $('[data-count]'); if (cnt) countUp(cnt, +cnt.dataset.count);
   }
 
   /* ================================================================== */
@@ -1152,8 +1290,8 @@
     const ag = $('#again');
     if (ag) ag.onclick = async () => {
       ag.disabled = true;
-      try { await Net.reset(S.code, S.hostId, GMQ.buildQuestions(S.room.questions.length)); await refresh(); }
-      catch (e) { ag.disabled = false; toast('😱 ' + e.message); }
+      try { await Net.reset(S.code, S.hostId, GMQ.buildQuestions(S.room.questions.length, roomDiff())); await refresh(); }
+      catch (e) { ag.disabled = false; toast(/host_reset|function/i.test(e.message) ? 'Nochmal spielen klappt erst nach dem Datenbank-Update. Erstell einfach einen neuen Raum 🪄' : '😱 ' + e.message, 6000); }
     };
   }
 
@@ -1168,8 +1306,8 @@
       try {
         const room = await Net.getRoom(saved.code);
         if (room) {
-          Object.assign(S, { role: saved.role, code: saved.code, hostId: saved.hostId, playerId: saved.playerId, hostPlays: saved.hostPlays, myAns: saved.myAns || {}, results: saved.results || {}, round: saved.round || 0, room });
-          if ((room.round || 0) !== S.round) { S.myAns = {}; S.results = {}; }
+          Object.assign(S, { role: saved.role, code: saved.code, hostId: saved.hostId, playerId: saved.playerId, hostPlays: saved.hostPlays, myAns: saved.myAns || {}, results: saved.results || {}, round: saved.round || 0, jokers: saved.jokers || freshJokers(), ranks: saved.ranks || {}, room });
+          if ((room.round || 0) !== S.round) { S.myAns = {}; S.results = {}; S.jokers = freshJokers(); S.ranks = {}; }
           if (S.role === 'player') S.seenMe = true;
           await enterRoom();
           return;
@@ -1183,5 +1321,5 @@
   })();
 
   // Debug-/Testzugriff
-  window.__gm = { S, refresh };
+  window.__gm = { S, refresh, showReaction };
 })();
