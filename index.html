@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ghost Math – Drehung</title>
+<meta name="description" content="Gruseliges Live-Mathe-Quiz zum Thema Drehung: Lehrer erstellt einen Raum, Schüler treten mit Code bei.">
+<meta name="theme-color" content="#140b22">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👻</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nunito:wght@500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="sky" aria-hidden="true">
+  <div class="moon"></div>
+  <span class="fly f1">🦇</span><span class="fly f2">👻</span><span class="fly f3">🦇</span><span class="fly f4">🕸️</span>
+</div>
+
+<header class="topbar">
+  <button class="logo" id="logoBtn" title="Startseite">👻 <span>Ghost Math</span></button>
+  <div class="topbar-right">
+    <span id="roomTag" class="room-tag hidden"></span>
+    <button class="icon-btn" id="soundBtn" title="Ton an/aus" aria-label="Ton an/aus">🔊</button>
+  </div>
+</header>
+
+<main id="app" aria-live="polite"></main>
+
+<div id="toast" class="toast hidden" role="status"></div>
+<canvas id="confetti" aria-hidden="true"></canvas>
+
+<script src="vendor/supabase.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="questions.js"></script>
+<script src="net.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
