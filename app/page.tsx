@@ -37,7 +37,7 @@ export default function Home() {
   const [agentDescription, setAgentDescription] = useState("");
   const [agentInstruction, setAgentInstruction] = useState("");
   const [query, setQuery] = useState("");
-  const [apiReady, setApiReady] = useState<boolean | null>(null);
+  const [apiReady, setApiReady] = useState<boolean | null>(null);\n  const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeChat = chats.find(c => c.id === activeChatId) ?? null;
@@ -56,8 +56,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== "undefined") localStorage.setItem(STORAGE, JSON.stringify({ agents, chats }));
-  }, [agents, chats]);
+    if (hydrated) localStorage.setItem(STORAGE, JSON.stringify({ agents, chats }));
+  }, [agents, chats, hydrated]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [activeChat?.messages.length, busy]);
 
