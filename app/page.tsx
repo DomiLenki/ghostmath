@@ -37,7 +37,8 @@ export default function Home() {
   const [agentDescription, setAgentDescription] = useState("");
   const [agentInstruction, setAgentInstruction] = useState("");
   const [query, setQuery] = useState("");
-  const [apiReady, setApiReady] = useState<boolean | null>(null);\n  const [hydrated, setHydrated] = useState(false);
+  const [apiReady, setApiReady] = useState<boolean | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeChat = chats.find(c => c.id === activeChatId) ?? null;
@@ -52,6 +53,7 @@ export default function Home() {
         if (Array.isArray(data.chats)) setChats(data.chats);
       }
     } catch { setNotice("Saved workspace data could not be loaded."); }
+    setHydrated(true);
     fetch("/api/chat").then(r => r.json()).then(d => setApiReady(Boolean(d.configured))).catch(() => setApiReady(false));
   }, []);
 
